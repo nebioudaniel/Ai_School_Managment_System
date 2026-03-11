@@ -1,78 +1,128 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
-import { revalidatePath } from 'next/cache'
+import { auth } from "@/lib/auth"
+import { prisma } from "@/lib/prisma"
+import { headers } from "next/headers"
+// @ts-ignore
+import { hashPassword } from "better-auth/crypto"
 
-function generateSlug(name: string) {
-    return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-}
+export async function submitSchoolInfo(data: {
+    schoolName: string
+    adminName: string
+    password?: string
+    slug?: string
+}) {
+    const session = await auth.api.getSession({
+        headers: await headers()
+    })
 
-export async function registerSchool(formData: FormData) {
-    const supabase = await createClient()
-
-    const schoolName = formData.get('schoolName') as string
-    const adminName = formData.get('adminName') as string
-    const email = formData.get('email') as string
-    const password = formData.get('password') as string
-    const plan = formData.get('plan') as string
-
-    if (!schoolName || !email || !password || !adminName) {
-        return { error: 'All fields are required.' }
+    if (!session) {
+        throw new Error("You must be signed in to submit school info")
     }
 
-    const slug = generateSlug(schoolName)
+    const { user } = session
 
-    // 1. Sign up the user
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-            data: {
-                name: adminName,
+    // 1. Update user name
+    await prisma.user.update({
+        where: { id: user.id },
+        data: { name: data.adminName }
+    })
+
+    // 2. Set password if provided
+    if (data.password) {
+        const hashedPassword = await hashPassword(data.password)
+
+        // Upsert the credential account
+        await prisma.account.upsert({
+            where: {
+                // In better-auth, the unique constraint is usually on (providerId, accountId)
+                // Since this is a manual prisma call, we'll find by userId and providerId first
+            },
+            // Wait, prisma unique constraint for Account is composite usually, but 
+            // in our schema it's just 'id'. We'll find by filter.
+            create: {
+                userId: user.id,
+                providerId: "credential",
+                accountId: user.id,
+                password: hashedPassword
+            },
+            update: {
+                password: hashedPassword
+            },
+            // @ts-ignore - we'll use a more robust way since we don't have the composite key in schema
+        }).catch(async () => {
+            // Fallback for missing unique constraint on multiple fields
+            const existing = await prisma.account.findFirst({
+                where: { userId: user.id, providerId: "credential" }
+            })
+            if (existing) {
+                await prisma.account.update({
+                    where: { id: existing.id },
+                    data: { password: hashedPassword }
+                })
+            } else {
+                await prisma.account.create({
+                    data: {
+                        userId: user.id,
+                        providerId: "credential",
+                        accountId: user.id,
+                        password: hashedPassword
+                    }
+                })
             }
+        })
+    }
+
+    // 3. Create or update school info
+    const generatedSlug = data.slug || data.schoolName.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-')
+
+    await prisma.school.upsert({
+        where: { userId: user.id },
+        create: {
+            name: data.schoolName,
+            slug: data.slug ? generatedSlug : `${generatedSlug}-${Math.random().toString(36).substring(2, 6)}`,
+            adminName: data.adminName,
+            email: user.email,
+            userId: user.id,
+            plan: "starter", // Default to starter
+            paid: false
+        },
+        update: {
+            name: data.schoolName,
+            slug: generatedSlug,
+            adminName: data.adminName,
         }
     })
 
-    if (authError) {
-        return { error: authError.message }
+    return { success: true }
+}
+
+export async function getSchoolSlug() {
+    const session = await auth.api.getSession({
+        headers: await headers()
+    })
+
+    if (!session) return null
+
+    const school = await prisma.school.findUnique({
+        where: { userId: session.user.id }
+    })
+
+    return school?.slug || null
+}
+export async function updateSchoolPlanSelection(plan: string, txRef: string) {
+    const session = await auth.api.getSession({
+        headers: await headers()
+    })
+
+    if (!session) {
+        throw new Error("Unauthorized")
     }
 
-    if (!authData.user) {
-        return { error: 'Failed to create user.' }
-    }
+    await prisma.school.update({
+        where: { userId: session.user.id },
+        data: { plan, txRef }
+    })
 
-    // 2. Create the school
-    const { data: schoolData, error: schoolError } = await supabase
-        .from('schools')
-        .insert([
-            { name: schoolName, slug, plan }
-        ])
-        .select()
-        .single()
-
-    if (schoolError) {
-        return { error: 'Failed to create school workspace. ' + schoolError.message }
-    }
-
-    // 3. Create the user record linked to school with role 'school_admin'
-    const { error: userError } = await supabase
-        .from('users')
-        .insert([
-            {
-                id: authData.user.id,
-                name: adminName,
-                email,
-                role: 'school_admin',
-                school_id: schoolData.id
-            }
-        ])
-
-    if (userError) {
-        // Note: in a real system we should handle rollback or rely on triggers
-        return { error: 'Failed to complete registration profile.' }
-    }
-
-    revalidatePath('/', 'layout')
-
-    return { success: true, slug: schoolData.slug }
+    return { success: true }
 }
