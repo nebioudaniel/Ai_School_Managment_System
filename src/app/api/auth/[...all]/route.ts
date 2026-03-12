@@ -1,7 +1,4 @@
-import { createAuthClient } from "better-auth/react";
-import { emailOTPClient } from "better-auth/client/plugins";
+import { auth } from "@/lib/auth";
+import { toNextJsHandler } from "better-auth/adapters/nextjs";
 
-export const authClient = createAuthClient({
-  baseUrl: process.env.Better_Auth_Url,
-  plugins: [emailOTPClient()],
-});
+export const { POST, GET } = toNextJsHandler(auth);
