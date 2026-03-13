@@ -1,55 +1,47 @@
-<<<<<<< HEAD
-
-=======
 "use client";
+
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { Navbar } from "@/components/layout/navbar";
-import { Input } from "@/components/ui/input";
-export default function LoginPage() {
+import { Button } from "@/components/ui/button";
+
+export default function RegesterPage() {
+  const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const route = useRouter();
-  // flow 1 login with email and password
-  const handlePasswordLogin = async () => {
-    const { data, error } = await authClient.signIn.email({
-      email,
-      password,
-    });
-    if (!error) {
-      // trigger the otp after password  sucsses
-      await authClient.emailOTP.sendVerificationOTP({
-        email,
-        type: "sign-in",
-      });
-      route.push("/verify?email=${email}");
+
+  const handleRegister = async () => {
+    try {
+      await authClient.emailOtpPlugin.sendOtp({ email });
+
+      router.push(`/verify?email=${email}`);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to send OTP");
     }
   };
-  // flow 2: continue with email
-  const handleOnlyEmail = async () => {
-    await authClient.emailOtp.sendVerificationOTP({
-      email,
-      type: "sign-in",
-    });
-    route.push("/verify?email=${email}");
-  };
+
   return (
     <div>
-      <div>
-        <Navbar />
-      </div>
-      <div>
-        <Input
-          placeholder=" enter your email"
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <Input
-          placeholder=" enter your password"
-          onChange={(e) => setPassword(e.target.value)}
-        />
-      </div>
+      <Navbar />
+
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Email"
+      />
+
+      <input
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        placeholder="Password"
+      />
+
+      <Button onClick={handleRegister}>Register</Button>
     </div>
   );
 }
->>>>>>> e036d71 (update auth system and OTP setup)

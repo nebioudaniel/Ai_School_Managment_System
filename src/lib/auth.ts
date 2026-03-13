@@ -1,18 +1,13 @@
+// src/lib/auth.ts
 import { betterAuth } from "better-auth";
-import { emailOTP } from "better-auth/providers/email-otp";
-import { supabaseAdapter } from "@better-auth/supabase-adapter";
+import { createClient } from "@supabase/supabase-js";
+import { emailOtpPlugin } from "./plugins/emailOtpPlugin";
 
 export const auth = betterAuth({
-  database: supabaseAdapter({
-    url: process.env.SUPABASE_URL!,
-    token: process.env.SUPERBASE_ROLE_KEY, // UES for service frole back end
-  }),
-  emailAndPassword: { enabled: true },
-  plugins: [
-    emailOTP({
-      async sendVerificationOTP({ email, otp }) {
-        //
-      },
-    }),
-  ],
+  plugins: [emailOtpPlugin()],
 });
+
+export const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+);
