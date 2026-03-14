@@ -11,7 +11,6 @@ export default function RegesterPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
 
   const handleRegister = async () => {
     try {
@@ -23,6 +22,12 @@ export default function RegesterPage() {
     }
   };
 
+  const continueWithGoogle = async () => {
+    await authClient.signIn.social({
+      provider: "google",
+    });
+  };
+
   return (
     <div className="flex flex-col min-h-screen">
       <Navbar />
@@ -31,30 +36,30 @@ export default function RegesterPage() {
         <div className="w-full max-w-sm px-6 space-y-6">
           <div className="space-y-2 text-center">
             <h1 className="text-2xl font-bold">Register</h1>
-            <p className="text-muted-foreground">
-              Enter your email to continue
-            </p>
           </div>
 
           <div className="space-y-4">
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={continueWithGoogle}
+            >
+              Continue with Google
+            </Button>
+
+            <div className="text-center text-sm text-muted-foreground">
+              or continue with email
+            </div>
+
             <Input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Email"
-              className="w-full"
-            />
-
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              className="w-full"
             />
 
             <Button onClick={handleRegister} className="w-full">
-              Register
+              Send OTP
             </Button>
           </div>
         </div>
